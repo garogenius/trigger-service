@@ -27,19 +27,42 @@ public class FinancialTransactionRunner {
 	@Autowired
 	private Connection con;
 
-	public void execute(long threadId) {
-		System.out.println("01. Execuation started...");
+	public void  persistLogTableIfNotExist() {
 		try {
+			log.info("01. Log table check started started...");
+			PreparedStatement tableCheckStatement = con.prepareStatement("SELECT * FROM USER_TABLES WHERE TABLE_NAME =?", ResultSet.TYPE_FORWARD_ONLY,
+					ResultSet.CONCUR_READ_ONLY);
+			tableCheckStatement.setString(1, "FRAUDAPIPROCESSINGSTATUS");
+			ResultSet resultSet = tableCheckStatement.executeQuery();
+			log.info("01. Getting start date time...");
+			if (resultSet == null || !resultSet.next()) {
+				//create table if not exist
+				 con.prepareStatement("CREATE TABLE FRAUDAPIPROCESSINGSTATUS (TRANSACTIONID NUMBER,TRANSACTIONTYPE VARCHAR2(64),BATCHTYPE VARCHAR2(50),BATCHID NUMBER,STATUS VARCHAR2(50),FINALIZEDTIME TIMESTAMP(6))", ResultSet.TYPE_FORWARD_ONLY,
+						ResultSet.CONCUR_UPDATABLE).execute();
+				tableCheckStatement.close();
+			}
+			log.info("02. Log table is ready...");
+		} catch (Exception ex) {
+			log.error(ex.getMessage());
+			ex.printStackTrace();
+		}
+	}
+
+	public void execute(long threadId) {
+		persistLogTableIfNotExist();
+
+		try {
+			log.info("01. Execution started");
 			Timestamp startDateTimestamp = null;
 			//getting start datetime
-			System.out.println(con.isReadOnly());
+			log.info(con.isReadOnly());
 			PreparedStatement startTimeStatement = con.prepareStatement("SELECT max(FINALIZEDTIME) from FRAUDAPIPROCESSINGSTATUS WHERE BATCHTYPE=?", ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_READ_ONLY);
-			System.out.println(startTimeStatement);
+			log.info(startTimeStatement);
 
 			startTimeStatement.setString(1, BatchType.FINANCIALBATCH.toString());
 			ResultSet rs1 = startTimeStatement.executeQuery();
-			System.out.println("01. Getting start date time...");
+			log.info("01. Getting start date time...");
 			if (rs1 != null && rs1.next()) {
 				startDateTimestamp = rs1.getTimestamp(1);
 				startTimeStatement.close();
@@ -48,7 +71,7 @@ public class FinancialTransactionRunner {
 
 			//if previous finalizedtime is not there, get from audit rail
 			if (startDateTimestamp == null) {
-				System.out.println("02. Getting start date time from RDS$FINANCIALRECEIPT...");
+				log.info("02. Getting start date time from RDS$FINANCIALRECEIPT...");
 				PreparedStatement maxStartTimeStatement = con.prepareStatement("SELECT max (FINALIZEDTIME) from " + dbRealSchema + ".RDS$FINANCIALRECEIPT" + db_Link, ResultSet.TYPE_FORWARD_ONLY,
 						ResultSet.CONCUR_READ_ONLY);
 				ResultSet rs2 = maxStartTimeStatement.executeQuery();
@@ -60,7 +83,7 @@ public class FinancialTransactionRunner {
 			}
 			//end
 
-			System.out.println("03.Get count of transaction by transfer type..");
+			log.info("03.Get count of transaction by transfer type..");
 			PreparedStatement categoryStatement = con.prepareStatement("SELECT TRANSFERTYPE, COUNT(*) AS COUNT FROM " + dbRealSchema + ".RDS$FINANCIALRECEIPT" + db_Link + " WHERE FINALIZEDTIME >=? GROUP BY TRANSFERTYPE", ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_READ_ONLY);
 			categoryStatement.setTimestamp(1, startDateTimestamp);
@@ -69,7 +92,7 @@ public class FinancialTransactionRunner {
 			int count;
 			if (rs3 != null) {
 				while (rs3.next()) {
-					System.out.println("04.Getting transaction type and count based on column index..");
+					log.info("04.Getting transaction type and count based on column index..");
 					transactionType = rs3.getString(1);
 					count = rs3.getInt(2);
 
@@ -92,7 +115,7 @@ public class FinancialTransactionRunner {
 
 		CompletableFuture<String> completedObj;
 		try {
-			System.out.println("04.Getting all transaction details..");
+			log.info("04.Getting all transaction details..");
 			String query = "SELECT FINANCIALTRANSACTIONID,TRANSFERTYPE FROM " + dbRealSchema + ".RDS$FINANCIALRECEIPT" + db_Link + "  WHERE FINALIZEDTIME >=?"
 					+ "AND TRANSFERTYPE =? AND ROWNUM <?";
 			PreparedStatement statement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
@@ -104,7 +127,7 @@ public class FinancialTransactionRunner {
 			String insertQuery;
 			PreparedStatement preparedStatement;
 			long batchId = threadId + new UniqueIdGenerator().generateLongId();
-			System.out.println("05.looping through transactions..");
+			log.info("05.looping through transactions..");
 
 			if (rs1 != null) {
 				int counter = 0;
@@ -134,7 +157,7 @@ public class FinancialTransactionRunner {
 				con.close();
 			}
 
-			System.out.println("06.Calling Financial SASFMS for batch ("+batchId+")..");
+			log.info("06.Calling Financial SASFMS for batch ("+batchId+")..");
 			completedObj = serviceCaller.callSASFMServiceBatchAPI(batchId);
 			if (completedObj != null) {
 				String response = completedObj.get();
