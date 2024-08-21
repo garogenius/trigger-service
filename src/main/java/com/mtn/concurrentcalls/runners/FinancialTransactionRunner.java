@@ -95,7 +95,7 @@ public class FinancialTransactionRunner {
 		long batchId = threadId + new UniqueIdGenerator().generateLongId();
 
 		try {
-			log.info("############### Processing batch "+batchId+" ################## ");
+			log.info("############### Processing financial batch "+batchId+" ################## ");
 			PreparedStatement preparedStatement;
 			log.info("06: Preparing next "+batchSize+" record for "+transactionType+"  batch "+batchId);
 

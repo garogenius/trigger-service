@@ -34,7 +34,7 @@ public class NonFinancialTransactionRunner {
 	public void execute(long threadId) {
 		databaseHelper.persistLogTableIfNotExist();
 		try {
-			System.out.println("01. Execution started...");
+			log.info("01. Execution started...");
 			Timestamp startDateTimestamp = null;
 
 			//getting start datetime
@@ -42,17 +42,17 @@ public class NonFinancialTransactionRunner {
 					ResultSet.CONCUR_READ_ONLY);
 			startTimeStatement.setString(1, BatchType.NONFINANCIALBATCH.toString());
 			ResultSet rs1 = startTimeStatement.executeQuery();
-			System.out.println("01. Getting start date time...");
+			log.info("01. Getting start date time...");
 			if (rs1 != null && rs1.next()) {
 				startDateTimestamp = rs1.getTimestamp(1);
 
 				startTimeStatement.close();
 				rs1.close();
 			}
-			System.out.println("Datetime: "+startDateTimestamp);
+			log.info("Datetime: "+startDateTimestamp);
 
 			if (startDateTimestamp == null) {
-				System.out.println("02. Getting start date time from RDS$AUDITTRAILLOGEVENT...");
+				log.info("02. Getting start date time from RDS$AUDITTRAILLOGEVENT...");
 				PreparedStatement maxStartTimeStatement = con.prepareStatement("SELECT max (LOGGINGTIME) from " + dbRealSchema + ".RDS$AUDITTRAILLOGEVENT" + db_Link,  ResultSet.TYPE_FORWARD_ONLY,
 						ResultSet.CONCUR_READ_ONLY);
 				ResultSet rs2 = maxStartTimeStatement.executeQuery();
@@ -63,8 +63,8 @@ public class NonFinancialTransactionRunner {
 					rs2.close();
 				}
 			}
-			System.out.println("Datetime: "+startDateTimestamp);
-			System.out.println("03.Get count of transaction type and count..");
+			log.info("Datetime: "+startDateTimestamp);
+			log.info("03.Get count of transaction type and count..");
 			PreparedStatement categoryStatement = con.prepareStatement("SELECT TRANSACTIONTYPE, COUNT(*) FROM " + dbRealSchema + ".RDS$AUDITTRAILLOGEVENT" + db_Link + " WHERE LOGGINGTIME >=? GROUP BY TRANSACTIONTYPE", ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_READ_ONLY);
 			categoryStatement.setTimestamp(1, startDateTimestamp);
@@ -74,10 +74,10 @@ public class NonFinancialTransactionRunner {
 			int count;
 			if(rs3 != null) {
 				while (rs3.next()){
-					System.out.println("04.Getting transaction type and count");
+					log.info("04.Getting transaction type and count");
 					transactionType = rs3.getString(1);
 					count = rs3.getInt(2);
-					System.out.println(transactionType + " is " + count);
+					log.info(transactionType + " is " + count);
 					if (count > 0) {
 						log.info("05: Processing " + transactionType);
 						buildAndProcessBatch(threadId, transactionType, startDateTimestamp);
@@ -98,17 +98,19 @@ public class NonFinancialTransactionRunner {
 		long batchId = threadId + new UniqueIdGenerator().generateLongId();
 
 		try {
-			log.info("############### Processing batch "+batchId+" ################## ");
+			log.info("############### Processing non financial batch "+batchId+" ################## ");
 			PreparedStatement preparedStatement;
 			log.info("06: Preparing next " + batchSize + " record for " + transactionType + "  batch " + batchId);
 
-			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT TRANSACTIONID, TRANSACTIONTYPE,'" + BatchType.NONFINANCIALBATCH.toString() + "' AS BATCHTYPE, " + batchId + " AS BATCHID,'PENDING' AS STATUS, FINALIZEDTIME  FROM RDS_UG.RDS$AUDITTRAILLOGEVENT" + db_Link +"  WHERE TRANSFERTYPE =? AND LOGGINGTIME >=? ORDER BY LOGGINGTIME ASC";
+			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT TRANSACTIONID, TRANSACTIONTYPE,? AS BATCHTYPE, ? AS BATCHID,'PENDING' AS STATUS, LOGGINGTIME AS FINALIZEDTIME  FROM RDS_UG.RDS$AUDITTRAILLOGEVENT" + db_Link +"  WHERE TRANSACTIONTYPE =? AND LOGGINGTIME >=? ORDER BY LOGGINGTIME ASC";
 			log.info("06.1: Prepared  SQL query " + query);
 			preparedStatement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_UPDATABLE);
-			preparedStatement.setString(1, transactionType);
-			preparedStatement.setTimestamp(2, startDateTimestamp);
-			preparedStatement.setInt(3, batchSize);
+
+			preparedStatement.setString(1,BatchType.NONFINANCIALBATCH.toString());
+			preparedStatement.setLong(2, batchId);
+			preparedStatement.setString(3, transactionType);
+			preparedStatement.setTimestamp(4, startDateTimestamp);
 			boolean dataResponse = preparedStatement.execute();
 			log.info("07: Preparing status: " + dataResponse);
 			log.info("08. Calling Financial SASFMS for batch " + batchId);
