@@ -38,9 +38,9 @@ public class FinancialServiceCaller {
 
 	@Async
 	public  CompletableFuture<String> callSASFMServiceBatchAPI(long batchId) {
-		System.out.println("Before financial API Calling batch("+batchId+")");
+		System.out.println("11: Before financial API Calling batch("+batchId+")");
 		String endpoint =BASEURL+"/"+FINANCIALBATCHAPI+"?batchId=" + batchId;
-        System.out.println("Endpoint:"+endpoint);
+        System.out.println("12: Calling system endpoint:"+endpoint);
 		String responseObj = restTemplate.getForObject(endpoint, String.class);
 		return CompletableFuture.completedFuture(responseObj);
 	}

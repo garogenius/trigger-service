@@ -55,10 +55,8 @@ public class FinancialTransactionRunner {
 			log.info("01. Execution started");
 			Timestamp startDateTimestamp = null;
 			//getting start datetime
-			log.info(con.isReadOnly());
 			PreparedStatement startTimeStatement = con.prepareStatement("SELECT max(FINALIZEDTIME) from FRAUDAPIPROCESSINGSTATUS WHERE BATCHTYPE=?", ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_READ_ONLY);
-			log.info(startTimeStatement);
 
 			startTimeStatement.setString(1, BatchType.FINANCIALBATCH.toString());
 			ResultSet rs1 = startTimeStatement.executeQuery();
@@ -83,7 +81,7 @@ public class FinancialTransactionRunner {
 			}
 			//end
 
-			log.info("03.Get count of transaction by transfer type..");
+			log.info("03. Get count of transaction by transfer type..");
 			PreparedStatement categoryStatement = con.prepareStatement("SELECT TRANSFERTYPE, COUNT(*) AS COUNT FROM " + dbRealSchema + ".RDS$FINANCIALRECEIPT" + db_Link + " WHERE FINALIZEDTIME >=? GROUP BY TRANSFERTYPE", ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_READ_ONLY);
 			categoryStatement.setTimestamp(1, startDateTimestamp);
@@ -92,12 +90,12 @@ public class FinancialTransactionRunner {
 			int count;
 			if (rs3 != null) {
 				while (rs3.next()) {
-					log.info("04.Getting transaction type and count based on column index..");
+					log.info("04. Getting transaction type and count based on column index..");
 					transactionType = rs3.getString(1);
 					count = rs3.getInt(2);
 
 					if (count > 0) {
-						log.info("Processing " + count + " transactions of " + transactionType);
+						log.info("05: Processing " + transactionType);
 						buildAndProcessBatch(threadId, transactionType, startDateTimestamp);
 					}
 				}
@@ -112,59 +110,29 @@ public class FinancialTransactionRunner {
 	}
 
 	public void buildAndProcessBatch(Long threadId, String transactionType, Timestamp startDateTimestamp) {
-
 		CompletableFuture<String> completedObj;
 		try {
-			log.info("04.Getting all transaction details..");
-			String query = "SELECT FINANCIALTRANSACTIONID,TRANSFERTYPE FROM " + dbRealSchema + ".RDS$FINANCIALRECEIPT" + db_Link + "  WHERE FINALIZEDTIME >=?"
-					+ "AND TRANSFERTYPE =? AND ROWNUM <?";
-			PreparedStatement statement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
-					ResultSet.CONCUR_READ_ONLY);
-			statement.setTimestamp(1, startDateTimestamp);
-			statement.setString(2, transactionType);
-			ResultSet rs1 = statement.executeQuery();
-
-			String insertQuery;
 			PreparedStatement preparedStatement;
 			long batchId = threadId + new UniqueIdGenerator().generateLongId();
-			log.info("05.looping through transactions..");
+			log.info("06: Preparing next "+batchSize+" record for "+transactionType+"  batch "+batchId);
 
-			if (rs1 != null) {
-				int counter = 0;
-				while (rs1.next()) {
-					++counter;
-					insertQuery = "INSERT INTO FRAUDAPIPROCESSINGSTATUS(TRANSACTIONID, TRANSACTIONTYPE, BATCHTYPE, BATCHID, STATUS, FINALIZEDTIME) values (?,?,?,?,'PENDING',current_timestamp)";
-					preparedStatement = con.prepareStatement(insertQuery, ResultSet.TYPE_FORWARD_ONLY,
-							ResultSet.CONCUR_UPDATABLE);
-					preparedStatement.setString(1, rs1.getString(1));
-					preparedStatement.setString(2, rs1.getString(2));
-					preparedStatement.setString(3, BatchType.FINANCIALBATCH.toString());
-					preparedStatement.setLong(4, batchId);
-					preparedStatement.execute();
-
-					preparedStatement.addBatch();
-					if (counter == batchSize) {
-						preparedStatement.executeBatch();
-						preparedStatement.clearBatch();
-						preparedStatement.close();
-						con.commit();
-						break;
-					}
-				}
-				statement.close();
-				rs1.close();
-				con.commit();
-				con.close();
-			}
-
-			log.info("06.Calling Financial SASFMS for batch ("+batchId+")..");
+			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT FINANCIALTRANSACTIONID AS TRANSACTIONID,TRANSFERTYPE AS TRANSACTIONTYPE,'"+BatchType.FINANCIALBATCH.toString()+"' AS BATCHTYPE, "+batchId+" AS BATCHID,'PENDING' AS STATUS, FINALIZEDTIME  FROM RDS_UG.RDS$FINANCIALRECEIPT  WHERE TRANSFERTYPE =? AND FINALIZEDTIME >=? ORDER BY FINALIZEDTIME ASC";
+		    log.info("06.1: Prepared  SQL query"+query);
+			preparedStatement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
+					ResultSet.CONCUR_UPDATABLE);
+			preparedStatement.setString(1, transactionType);
+			preparedStatement.setTimestamp(2, startDateTimestamp);
+			preparedStatement.setInt(3, batchSize);
+			boolean dataResponse= preparedStatement.execute();
+			log.info("07: Preparing status: "+dataResponse);
+			log.info("08. Calling Financial SASFMS for batch "+batchId);
 			completedObj = serviceCaller.callSASFMServiceBatchAPI(batchId);
 			if (completedObj != null) {
 				String response = completedObj.get();
-				log.info("Financial batch request processed with batch " + batchId);
+				log.info("09: Financial batch request processed with batch " + batchId);
 				log.info(response);
 			} else {
-				log.error("Unable to process system layer API call");
+				log.error("10: Unable to process system layer API call");
 			}
 		} catch (Exception ex) {
 			log.error(ex.getMessage());
