@@ -103,7 +103,7 @@ public class NonFinancialTransactionRunner {
 			log.info("06: Preparing next " + batchSize + " record for " + transactionType + "  batch " + batchId);
 
 			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT TRANSACTIONID, TRANSACTIONTYPE,'" + BatchType.NONFINANCIALBATCH.toString() + "' AS BATCHTYPE, " + batchId + " AS BATCHID,'PENDING' AS STATUS, FINALIZEDTIME  FROM RDS_UG.RDS$AUDITTRAILLOGEVENT" + db_Link +"  WHERE TRANSFERTYPE =? AND LOGGINGTIME >=? ORDER BY LOGGINGTIME ASC";
-			log.info("06.1: Prepared  SQL query" + query);
+			log.info("06.1: Prepared  SQL query " + query);
 			preparedStatement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_UPDATABLE);
 			preparedStatement.setString(1, transactionType);

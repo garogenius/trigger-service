@@ -71,7 +71,7 @@ public class FinancialTransactionRunner {
 			int count;
 			if (rs3 != null) {
 				while (rs3.next()) {
-					log.info("04. Getting transaction type and count based on column index..");
+					log.info("04. Getting transaction type and count");
 					transactionType = rs3.getString(1);
 					count = rs3.getInt(2);
 
@@ -99,13 +99,15 @@ public class FinancialTransactionRunner {
 			PreparedStatement preparedStatement;
 			log.info("06: Preparing next "+batchSize+" record for "+transactionType+"  batch "+batchId);
 
-			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT FINANCIALTRANSACTIONID AS TRANSACTIONID,TRANSFERTYPE AS TRANSACTIONTYPE,'"+BatchType.FINANCIALBATCH.toString()+"' AS BATCHTYPE, "+batchId+" AS BATCHID,'PENDING' AS STATUS, FINALIZEDTIME  FROM RDS_UG.RDS$FINANCIALRECEIPT" + db_Link +"  WHERE TRANSFERTYPE =? AND FINALIZEDTIME >=? ORDER BY FINALIZEDTIME ASC";
-		    log.info("06.1: Prepared  SQL query"+query);
+			String query = "INSERT INTO FRAUDAPIPROCESSINGSTATUS SELECT FINANCIALTRANSACTIONID AS TRANSACTIONID,TRANSFERTYPE AS TRANSACTIONTYPE,? AS BATCHTYPE, ? AS BATCHID,'PENDING' AS STATUS, FINALIZEDTIME  FROM RDS_UG.RDS$FINANCIALRECEIPT" + db_Link +"  WHERE TRANSFERTYPE =? AND FINALIZEDTIME >=? ORDER BY FINALIZEDTIME ASC";
+		    log.info("06.1: Prepared  SQL query "+query);
 			preparedStatement = con.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
 					ResultSet.CONCUR_UPDATABLE);
-			preparedStatement.setString(1, transactionType);
-			preparedStatement.setTimestamp(2, startDateTimestamp);
-			preparedStatement.setInt(3, batchSize);
+
+			preparedStatement.setString(1,BatchType.FINANCIALBATCH.toString());
+			preparedStatement.setLong(2, batchId);
+			preparedStatement.setString(3, transactionType);
+			preparedStatement.setTimestamp(4, startDateTimestamp);
 			boolean dataResponse= preparedStatement.execute();
 			log.info("07: Preparing status: "+dataResponse);
 			log.info("08. Calling Financial SASFMS for batch "+batchId);

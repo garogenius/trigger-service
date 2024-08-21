@@ -2,19 +2,18 @@ package com.mtn.concurrentcalls.services;
 
 import java.math.BigDecimal;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.AsyncResult;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class FinancialServiceCaller {
 
-	@Autowired
+    @Autowired
 	private RestTemplate restTemplate;
 	
 	@Value("${CSBF1}")
@@ -38,19 +37,19 @@ public class FinancialServiceCaller {
 
 	@Async
 	public  CompletableFuture<String> callSASFMServiceBatchAPI(long batchId) {
-		System.out.println("11: Before financial API Calling batch("+batchId+")");
+		log.info("11: Before financial API Calling batch("+batchId+")");
 		String endpoint =BASEURL+"/"+FINANCIALBATCHAPI+"?batchId=" + batchId;
-        System.out.println("12: Calling system endpoint:"+endpoint);
+        log.info("12: Calling system endpoint:"+endpoint);
 		String responseObj = restTemplate.getForObject(endpoint, String.class);
 		return CompletableFuture.completedFuture(responseObj);
 	}
 
 	@Async
 	public  CompletableFuture<String> callSASFMService(BigDecimal finTranId, String tranType) throws Exception {
-		System.out.println("Before API Calling");
+		log.info("Before API Calling");
 
 		String serviceEndpoint=getLocalServiceEndpoint(finTranId,tranType);
-		System.out.println("Endpoint: "+serviceEndpoint);
+		log.info("Endpoint: "+serviceEndpoint);
 
         String responseObj = restTemplate.getForObject(serviceEndpoint, String.class);
         return CompletableFuture.completedFuture(responseObj);
